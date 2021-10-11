@@ -1,0 +1,198 @@
+{{/*
+	On-duty staff system that allows staff members to designate themselves as "on-duty".
+	See <https://yagpdb-cc.github.io/moderation/staff-on-duty> for more information.
+
+	Author: dvoraknt <https://github.com/dvoraknt>
+*/}}
+
+{{/* Configurable values */}}
+{{$dutyRole := 892413262254194698}}
+{{$autoOff := 5}}
+
+{{$dutyChannel := 892142837502726205}}
+{{$chanEdit := true}}
+{{/* End of configurable values */}}
+
+{{if not (dbGet 0 "modOnDuty")}}{{dbSet 0 "modOnDuty" ""}}{{end}}{{/*creates initial database slot. you can delete this after first run if you know what you are doing*/}}
+
+{{$onDuty := ""}}
+{{if .ExecData}} 
+	{{if eq (str .ExecData) "update"}}
+		{{$current := 0}}{{$name := ""}}{{$member := ""}}{{$dutyList := ""}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$dutySplit := split $onDuty ";"}}
+		{{if eq (len $dutySplit) 1}}{{$dutyList = "None"}}{{else}}
+		{{range $dutySplit}}
+			{{- $current = (toInt . ) -}}
+			{{if $current}} 
+				{{$member = getMember $current}}
+				{{$name = $member.User}}
+				{{- $dutyList = joinStr ", " $dutyList $name -}}
+				{{if not (targetHasRoleID $current $dutyRole)}}{{giveRoleID $current $dutyRole}}{{end}}
+			{{end}}{{end}}
+		{{end}}
+		{{if $chanEdit}}
+			{{$curTopic := index (reSplit `(-\s)?Staff connectés :` (getChannel $dutyChannel).Topic) 0}}
+			{{if $curTopic}}
+				{{$curTopic = print $curTopic " - Staff connectés : " $dutyList}}
+			{{else}}
+				{{$curTopic = print "Staff connectés : " $dutyList}}
+			{{end}}
+			{{if gt (len $curTopic) 1024}}
+				{{sendDM (print "**On duty CC report:** your channel topic could not be changed - topic exceeded 1024 characters. Please shorten your user defined topic text or contact the person in charge of your servers YAGPDB custom commands to disable the staff list.")}}
+			{{else}}
+				{{editChannelTopic $dutyChannel (print $curTopic)}}
+			{{end}}
+		{{end}}
+		
+	{{else}}
+		{{takeRoleID .ExecData $dutyRole 0}}
+		{{sendDM (print "Tu as été mis hors service après " $autoOff " heures, Si c'est une erreur, tu peux retourner en service.")}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$onDuty = reReplace (print .ExecData ";") $onDuty ""}}
+		{{dbSet 0 "modOnDuty" $onDuty}}
+		{{if not (dbGet 0 "onDutyCD")}}
+			{{execCC .CCID nil 305 "update"}}
+			{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+		{{end}}
+	{{end}} 
+
+
+	{{if eq (str .ExecData) "uptodate"}}
+		{{$current := 0}}{{$name := ""}}{{$member := ""}}{{$dutyList := ""}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$dutySplit := split $onDuty ";"}}
+		{{if eq (len $dutySplit) 1}}{{$dutyList = "None"}}{{else}}
+		{{range $dutySplit}}
+			{{- $current = (toInt . ) -}}
+			{{if $current}} 
+				{{$member = getMember $current}}
+				{{$name = $member.User}}
+				{{- $dutyList = joinStr ", " $dutyList $name -}}
+				{{if not (targetHasRoleID $current $dutyRole)}}{{giveRoleID $current $dutyRole}}{{end}}
+			{{end}}{{end}}
+		{{end}}
+		{{if $chanEdit}}
+			{{$curTopic := index (reSplit `(-\s)?Staff connectés :` (getChannel $dutyChannel).Topic) 0}}
+			{{if $curTopic}}
+				{{$curTopic = print $curTopic " - Staff connectés : " $dutyList}}
+			{{else}}
+				{{$curTopic = print "Staff connectés : " $dutyList}}
+			{{end}}
+			{{if gt (len $curTopic) 1024}}
+				{{sendDM (print "**On duty CC report:** your channel topic could not be changed - topic exceeded 1024 characters. Please shorten your user defined topic text or contact the person in charge of your servers YAGPDB custom commands to disable the staff list.")}}
+			{{else}}
+				{{editChannelTopic $dutyChannel (print $curTopic)}}
+			{{end}}
+		{{end}}
+		
+	{{else}}
+		{{takeRoleID .ExecData $dutyRole 0}}
+		{{sendDM (print "Tu as été mis hors service après " $autoOff " heures, Si c'est une erreur, tu peux retourner en service.")}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$onDuty = reReplace (print .ExecData ";") $onDuty ""}}
+		{{dbSet 0 "modOnDuty" $onDuty}}
+		{{if not (dbGet 0 "onDutyCD")}}
+			{{execCC .CCID nil 305 "update"}}
+			{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+		{{end}}
+	{{end}}
+
+
+{{else}}
+{{/*========= on/off/update =========*/}}
+
+	{{if and .CmdArgs (eq .Cmd "-offduty")}}
+		{{if $idiotStaff := reFind `(\d{17,20})` (index .CmdArgs 0)}}
+			{{takeRoleID $idiotStaff $dutyRole 0}}
+			{{sendMessage  nil (print (getMember $idiotStaff).User.String " n'est plus en service.")}}
+			{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+			{{$onDuty = reReplace (print $idiotStaff ";") $onDuty ""}}
+			{{dbSet 0 "modOnDuty" $onDuty}}
+			{{if not (dbGet 0 "onDutyCD")}}
+				{{execCC 48 nil 305 "update"}}
+				{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+			{{end}}
+		{{else}}
+			{{sendMessage nil (print "Pas de mention ou ID incorrect.")}}
+		{{end}}
+	{{else if and .CmdArgs (eq .Cmd "-onduty")}}
+		{{$subCmd := index .CmdArgs 0}}
+		{{if eq $subCmd "list"}}
+		{{$current := 0}}{{$name := ""}}{{$member := ""}}{{$dutyList := ""}}
+			{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+			{{$dutySplit := split $onDuty ";"}}
+			{{if eq (len $dutySplit) 1}}{{$dutyList = "None"}}{{else}}
+				{{range $dutySplit}}
+					{{- $current = (toInt . ) -}}
+					{{if $current}} 
+						{{$member = getMember $current}}
+						{{$name = or $member.Nick $member.User.Username}}
+						{{- $dutyList = joinStr ", " $dutyList $name -}}
+						{{if not (targetHasRoleID $current $dutyRole)}}{{giveRoleID $current $dutyRole}}
+						{{end}}
+					{{end}}
+				{{end}}
+			{{end}}
+			{{sendMessage nil (print "Staff connectés : " $dutyList)}}
+		{{else if eq $subCmd "update"}}
+			{{if and $chanEdit (not (dbGet 0 "onDutyCD"))}}
+				{{execCC .CCID nil 35 "update"}}
+				{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+				{{sendMessage nil (print "Je vais update le salon.")}}
+			{{else if $chanEdit}}
+				{{sendMessage nil (print "Il me semble que ce n'est pas encore utile.")}}
+			{{else}}
+				{{sendMessage nil (joinStr "" "Il y a une erreur de permission avec le salon <#" $dutyChannel "> `-onduty list`" )}}
+			{{end}}
+		{{end}}
+	
+
+	{{else if $Staff := reFind `(\d{17,20})` (index .CmdArgs 0)}}
+		{{giveRoleID $Staff $dutyRole 0}}
+		{{sendMessage nil (print (getMember $Staff).User.String " est désormais en service.")}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$onDuty = reReplace (print $Staff ";") $onDuty ""}}
+		{{dbSet 0 "modOnDuty" $onDuty}}
+		{{if not (dbGet 0 "onDutyCD")}}
+			{{execCC 48 nil 305 "update"}}
+			{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+		{{end}}
+
+	{{end}}
+
+{{else}}
+{{/*========sans arguments==========*/}}
+
+	{{if and (hasRoleID $dutyRole) (eq .Cmd "-onduty")}}
+		{{sendMessage nil (print "Tu es déjà en service ! Envoie `-offduty` Pour prendre une pause.")}}
+		
+	{{else if and (not (hasRoleID $dutyRole)) (eq .Cmd "-offduty")}}
+		{{sendMessage nil (print "Tu es déjà hors service ! Tu peux envoyer `-onduty` pour prendre ton service.")}}
+		
+	{{else if and (hasRoleID $dutyRole) (eq .Cmd "-offduty")}}
+		{{removeRoleID $dutyRole 0}}
+		{{sendMessage  nil (print "Tu es désormais hors service.")}}
+		{{$onDuty = (dbGet 0 "modOnDuty").Value}}
+		{{$onDuty = reReplace (print .User.ID ";") $onDuty ""}}
+		{{dbSet 0 "modOnDuty" $onDuty}}
+		{{cancelScheduledUniqueCC .CCID (print "onduty-" .User.ID)}}
+		{{if not (dbGet 0 "onDutyCD")}}
+			{{execCC .CCID nil 35 "update"}}
+			{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+		{{end}}
+		
+	{{else if and (not (hasRoleID $dutyRole)) (eq .Cmd "-onduty")}}
+		{{addRoleID $dutyRole}}
+		{{sendMessage nil (print "Tu es désormais en service.")}}
+		{{$onDuty = print (or (dbGet 0 "modOnDuty").Value) .User.ID ";"}}
+		{{dbSet 0 "modOnDuty" $onDuty}}
+		{{scheduleUniqueCC .CCID nil (mult 3600 $autoOff) (print "onduty-" .User.ID) .User.ID}}
+		{{if and $chanEdit (not (dbGet 0 "onDutyCD")) (not .IsPremium)}}
+			{{sendMessage nil (print .User " Désolé de te le dire, mais tu ne seras pas encore affiché, pas avant la prochaine mise à jour.")}}
+		{{else if and $chanEdit (not (dbGet 0 "onDutyCD"))}}
+			{{execCC .CCID nil 35 "update"}}
+			{{dbSetExpire 0 "onDutyCD" "on CD" 306}}
+		{{end}}
+	{{end}}
+{{end}}
